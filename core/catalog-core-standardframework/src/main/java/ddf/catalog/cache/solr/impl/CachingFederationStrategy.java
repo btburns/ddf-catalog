@@ -534,8 +534,8 @@ public class CachingFederationStrategy implements FederationStrategy, PostIngest
             long deadline = System.currentTimeMillis() + query.getTimeoutMillis();
 
             Map<String, Serializable> returnProperties = returnResults.getProperties();
-            int futureCount = futures.size();
-            for (int i = 0; i < futureCount; i++) {
+
+            for (int i = futures.size(); i > 0; i--) {
                 String sourceId = "Unknown Source";
                 try {
                     Future<SourceResponse> future;
@@ -569,10 +569,8 @@ public class CachingFederationStrategy implements FederationStrategy, PostIngest
                         returnProperties.putAll(properties);
                     }
                 } catch (InterruptedException e) {
-                    logger.warn(
-                            "Couldn't get results from completed federated query on for {}",
-                            sourceId, e);
-                    processingDetails.add(new ProcessingDetailsImpl(sourceId, e));
+                    interruptRemainingSources(processingDetails, e);
+                    break;
                 } catch (ExecutionException e) {
                     logger.warn("Couldn't get results from completed federated query for {}",
                             sourceId, e.getCause());
@@ -607,6 +605,17 @@ public class CachingFederationStrategy implements FederationStrategy, PostIngest
                     logger.info("Search timed out for {}", expiredSource.getId());
                     processingDetails.add(new ProcessingDetailsImpl(expiredSource.getId(),
                             new TimeoutException()));
+                }
+            }
+        }
+
+        private void interruptRemainingSources(Set<ProcessingDetails> processingDetails,
+                InterruptedException interruptedException) {
+            for (Source interruptedSource : futures.values()) {
+                if (interruptedSource != null) {
+                    logger.info("Search interrupted for {}", interruptedSource.getId());
+                    processingDetails.add(new ProcessingDetailsImpl(interruptedSource.getId(),
+                            interruptedException));
                 }
             }
         }
